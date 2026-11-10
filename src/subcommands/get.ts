@@ -25,6 +25,7 @@ import { fuzzyHighlightOptions, searchTheme } from "../inquirerTheme.js";
 import { addLogLevelOptions, createLogger, type LogLevelArgs } from "../logLevel.js";
 import { runPromptWithExitHandling } from "../prompt.js";
 import { tryParseLmStudioArtifactUrl } from "./parseLmStudioArtifactUrl.js";
+import { resolveDownloadProxyUrl } from "./getProxy.js";
 
 type GetCommandOptions = OptionValues &
   CreateClientArgs &
@@ -33,6 +34,7 @@ type GetCommandOptions = OptionValues &
     gguf?: boolean;
     select?: boolean;
     yes?: boolean;
+    proxy?: string;
   };
 
 type ArtifactDownloadPlanModelNode = Extract<ArtifactDownloadPlanNode, { type: "model" }>;
@@ -68,6 +70,7 @@ interface DownloadPlannerCliOpts {
   compatibilityTypes?: Array<ModelCompatibilityType>;
   requestedQuantName?: string;
   commandTarget?: string;
+  proxyUrl?: string;
 }
 
 const getCommand = new Command<[], GetCommandOptions>()
@@ -104,6 +107,10 @@ const getCommand = new Command<[], GetCommandOptions>()
       staff picks matching the search term, the first one will be used. If there are multiple
       download options, the preselected option based on your hardware and preferences will be used.
     `,
+  )
+  .option(
+    "--proxy <url>",
+    text`Use an HTTP(S) proxy for downloads. Defaults to HTTPS_PROXY or HTTP_PROXY if set. Requires backend support.`,
   )
   .option(
     "--select",
@@ -365,6 +372,7 @@ getCommand.action(async (modelName, options: GetCommandOptions) => {
         ? undefined
         : specifiedQuantName;
     const compatibilityTypes = getRequestedCompatibilityTypes({ mlx, gguf });
+    const proxyUrl = resolveDownloadProxyUrl(options.proxy, process.env);
 
     await using client = await createClient(logger, options);
     const resolvedGetRequest = await resolveGetRequest({
@@ -380,6 +388,7 @@ getCommand.action(async (modelName, options: GetCommandOptions) => {
       select,
       compatibilityTypes,
       requestedQuantName,
+      proxyUrl,
       commandTarget: resolvedGetRequest.commandTarget,
       resolutionPreference: makeResolutionPreferences({
         fileNamePreference: resolvedGetRequest.fileNamePreference,
@@ -1107,6 +1116,7 @@ function createDownloadPlanner(
       name: request.name,
       compatibilityTypes: opts.compatibilityTypes,
       resolutionPreference: opts.resolutionPreference,
+      proxyUrl: opts.proxyUrl,
       onPlanUpdated,
     });
   }
@@ -1115,6 +1125,7 @@ function createDownloadPlanner(
     source: request.source,
     compatibilityTypes: opts.compatibilityTypes,
     resolutionPreference: opts.resolutionPreference,
+    proxyUrl: opts.proxyUrl,
     onPlanUpdated,
   });
 }
